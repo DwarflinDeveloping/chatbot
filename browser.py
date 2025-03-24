@@ -32,6 +32,7 @@ F_VIDEO_URL = 'https://youtube.com/watch?v={}'
 class ExitReason(enum.Enum):
     FINISHED = 0    # properly reached max_votes
     WEBDRIVER = 1   # WebdriverException
+    FORCED = 2      # user forcefully stopped the program
 
 @dataclasses.dataclass
 class Browser:
@@ -40,6 +41,7 @@ class Browser:
     password: str
     channel_name: str
 
+    exit_var: Value
     alltime_count: Value
     alltime_count_lock: Lock
     alltime_count_listener: Callable = None
@@ -88,6 +90,10 @@ class Browser:
     def last_vote(self, value: bool):
         self.data['last_vote'] = value
         self.save_data()
+
+    @property
+    def exit(self):
+        return self.exit_var.value
 
     def save_data(self) -> None:
         write_acc_data(*self.hashes, data=self.data)
@@ -153,13 +159,16 @@ class Browser:
             self._wait()
 
     def vote_loop(self) -> ExitReason:
-        self.log(INFO, f'Starting vote loop for {self.channel_name}...')
+        self.log(INFO, f'Starting vote loop...')
         self.active = True
         session_count = 0
         exit_reason = None
 
         try:
             while True:
+                if self.exit:
+                    raise KeyboardInterrupt()
+
                 session_count += 1
                 self.acc_count += 1
                 self._vote(session_count)
@@ -171,13 +180,17 @@ class Browser:
 
         except WebDriverException as exc:
             session_count -= 1
-            self.log(FATAL, f'WebdriverException while running vote loop for {self.channel_name}!\n{exc.msg}')
+            self.log(FATAL, f'WebdriverException while running vote loop!\n{exc.msg}')
             exit_reason = ExitReason.WEBDRIVER
+
+        except KeyboardInterrupt:
+            self.log(DEBUG, f'KeyboardInterrupt while running vote loop!')
+            exit_reason = ExitReason.FORCED
 
         # TODO other exceptions cause ExitReason None!!!!!!
 
         else:
-            logger.info(f'Successfully finished vote loop for {self.channel_name}!')
+            logger.info(f'Successfully finished vote loop!')
             exit_reason = ExitReason.FINISHED
 
         finally:

@@ -31,6 +31,7 @@ class Application:
         self.active_processes: List[Process] = []
 
         self.data: dict = load_app_data()
+        self.exit_var: Value = Value('i', False)
         self.count_var: Value = Value('i', self.data['count'])
         self.count_lock: Lock = Lock()
 
@@ -43,8 +44,8 @@ class Application:
 
         with SB(test=True, uc=True, headed=True) as sb:
             browser = Browser(
-                sb, email, password, acc_name, self.count_var, self.count_lock, self._count_listener,
-                security_wait=self.security_wait
+                sb, email, password, acc_name, self.exit_var, self.count_var, self.count_lock, self._count_listener,
+                security_wait=self.security_wait, vote_cooldown=self.vote_cooldown
             )
             browser.login()
             browser.switch_channel()
@@ -103,6 +104,12 @@ class Application:
                     logger.info(f'Creating task {process.name}')
                     process.start()
                     self.active_processes.append(process)
-                    sleep(5)
+                    sleep(10)
+
+        except KeyboardInterrupt as exc:
+            self.exit_var.value = True
+            """for process in self.active_processes:
+                process.join()"""
+
         finally:
             print('Finished!')

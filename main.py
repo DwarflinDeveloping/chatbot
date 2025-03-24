@@ -26,7 +26,7 @@ def main():
 
     app = Application(
         credentials=credentials,
-        vid='OxzHQ546YQY', f_msg='DE #{}', max_accounts=1)
+        vid='OxzHQ546YQY', f_msg='DE #{}', max_accounts=5)
     app.run()
 
 if __name__ == '__main__':
