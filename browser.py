@@ -144,7 +144,7 @@ class Browser:
     def _vote(self, session_count: int):
         msg_input = 'html body yt-live-chat-app div#contents.style-scope.yt-live-chat-app yt-live-chat-renderer.style-scope.yt-live-chat-app tp-yt-iron-pages#content-pages.style-scope.yt-live-chat-renderer div#chat-messages.style-scope.yt-live-chat-renderer.iron-selected div#contents.style-scope.yt-live-chat-renderer tp-yt-iron-pages#panel-pages.style-scope.yt-live-chat-renderer div#input-panel.style-scope.yt-live-chat-renderer.iron-selected yt-live-chat-message-input-renderer#live-chat-message-input.style-scope.yt-live-chat-renderer div#container.style-scope.yt-live-chat-message-input-renderer div#top.style-scope.yt-live-chat-message-input-renderer div#input-container.style-scope.yt-live-chat-message-input-renderer yt-live-chat-text-input-field-renderer#input.style-scope.yt-live-chat-message-input-renderer div#input.style-scope.yt-live-chat-text-input-field-renderer'
 
-        self.browser.type(msg_input, self.f_msg.format(self.alltime_count.value) + webdriver.Keys.ENTER)  # send message
+        self.browser.type(msg_input, self.f_msg.format(self.alltime_count.value + .1) + webdriver.Keys.ENTER)  # send message
         self.log(DEBUG, f'Vote #{self.alltime_count.value} (#{self.acc_count} for account) (#{session_count} for session)')
 
         with self.alltime_count_lock:
