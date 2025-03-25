@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 from processing import Application
+from chatvote import *
 
 root = logging.getLogger()
 root.setLevel(logging.DEBUG)
@@ -13,6 +14,12 @@ handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 root.addHandler(handler)
+
+max_accounts = {
+    # CHATVOTE_ID: 1,
+    # IDLECHATVOTE_ID: 1,
+    CHATVOTECOMBO_ID: 1
+}
 
 def load_credentials() -> dict:
     credentials_file = Path('data', 'credentials.json')
@@ -25,8 +32,7 @@ def main():
     credentials = load_credentials()
 
     app = Application(
-        credentials=credentials,
-        vid='OxzHQ546YQY', f_msg='DE #{}', max_accounts=5)
+        credentials=credentials, f_msg='DE #{}', max_accounts=max_accounts)
     app.run()
 
 if __name__ == '__main__':

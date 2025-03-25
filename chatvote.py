@@ -1,0 +1,9 @@
+CHATVOTE_ID = 'OxzHQ546YQY'
+IDLECHATVOTE_ID = '-fesy2kdDxo'
+CHATVOTECOMBO_ID = 'hTwVzwT4Yno'
+
+cooldowns = {
+    CHATVOTE_ID: 6,
+    IDLECHATVOTE_ID: 13,
+    CHATVOTECOMBO_ID: 3.2
+}

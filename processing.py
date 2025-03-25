@@ -10,6 +10,7 @@ from seleniumbase import SB
 from typing_extensions import TypeAlias
 
 from browser import Browser
+from chatvote import cooldowns
 from data import load_acc_data, write_acc_data, load_app_data, write_app_data, encode
 
 import logging
@@ -21,14 +22,13 @@ logger = logging.getLogger(__name__)
 @dataclasses.dataclass
 class Application:
     credentials: Dict[str, Dict[str, List[str]] | Dict[str, str]]
-    vid: str
     f_msg: str
-    max_accounts: int
-    vote_cooldown: float = 6
+    max_accounts: Dict[str, int]
     security_wait: float = 2
+    vote_cooldown: float = None
 
     def __post_init__(self):
-        self.active_processes: List[Process] = []
+        self.active_processes: Dict[str, List[Process]] = {vid: [] for vid in self.max_accounts}
 
         self.data: dict = load_app_data()
         self.exit_var: Value = Value('i', False)
@@ -39,22 +39,23 @@ class Application:
         self.data['count'] = self.count_var.value
         write_app_data(self.data)
 
-    def _browser_task(self, email: str, password: str, acc_name: str):
+    def _browser_task(self, email: str, password: str, acc_name: str, vid: str):
         logger.info(f'Browser for {email}/{acc_name} starting...')
 
         with SB(test=True, uc=True, headed=True) as sb:
             browser = Browser(
                 sb, email, password, acc_name, self.exit_var, self.count_var, self.count_lock, self._count_listener,
-                security_wait=self.security_wait, vote_cooldown=self.vote_cooldown
+                security_wait=self.security_wait,
+                vote_cooldown=self.vote_cooldown if self.vote_cooldown is not None else cooldowns[vid]
             )
             browser.login()
             browser.switch_channel()
-            browser.open_livestream(self.vid)
+            browser.open_livestream(vid)
             exit_reason = browser.vote_loop()
 
         logger.info(f'Voting for {browser.email} / {browser.channel_name} ended with {str(exit_reason)}!')
 
-    def get_ready_accs(self) -> List[Process]:
+    def get_ready_accs(self) -> Tuple[str, str, str]:
         processes = []
         channels = []
         for email in self.credentials:
@@ -76,9 +77,8 @@ class Application:
                         logger.debug(f'Account {acc_name} of {email} skipped ({dt_days}d<1d) ({dt_secs}s)')
                         continue
 
-                process = Process(name='/'.join((email, acc_name)), target=self._browser_task,
-                                  args=(email, password, acc_name), daemon=True)
-                processes.append(process)
+                acc = (email, password, acc_name)
+                processes.append(acc)
                 channels.append(acc_name)
 
         logger.debug(f'Fetched accounts: {", ".join(channels)}')
@@ -87,26 +87,33 @@ class Application:
     def run(self):
         try:
             while True:
-                self.active_processes = [p for p in self.active_processes if p.is_alive()]
+                p_vid = None
+                for vid in self.max_accounts:
+                    # filter out finished processes
+                    if len(self.active_processes[vid]) < self.max_accounts[vid]:
+                        p_vid = vid  # stream with not enough accounts found
+                        break
 
-                if len(self.active_processes) >= self.max_accounts:
+                if p_vid is None:  # currently all streams started
                     sleep(.5)
                     continue
 
                 ready_accs = self.get_ready_accs()
                 try:
-                    process = random.choice(ready_accs)
+                    args = random.choice(ready_accs)
                 except IndexError:
                     logger.warning(f'{len(self.active_processes)} processes running but {self.active_processes} needed!\n'
                                    f'Trying again in 20s.')
                     sleep(20)
                 else:
+                    process = Process(name='/'.join((args[0], args[2])), target=self._browser_task,
+                                      args=args+(p_vid,), daemon=True)
                     logger.info(f'Creating task {process.name}')
                     process.start()
-                    self.active_processes.append(process)
+                    self.active_processes[p_vid].append(process)
                     sleep(10)
 
-        except KeyboardInterrupt as exc:
+        except KeyboardInterrupt:
             self.exit_var.value = True
             """for process in self.active_processes:
                 process.join()"""
