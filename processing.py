@@ -11,7 +11,7 @@ from typing_extensions import TypeAlias
 
 from browser import Browser
 from chatvote import cooldowns
-from data import load_acc_data, write_acc_data, load_app_data, write_app_data, encode
+from data import load_acc_data, load_app_data, write_app_data, encode
 
 import logging
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ class Application:
 
         with SB(test=True, uc=True, headed=True) as sb:
             browser = Browser(
-                sb, email, password, acc_name, self.exit_var, self.count_var, self.count_lock, self._count_listener,
+                sb, email, password, acc_name, self.f_msg, self.exit_var, self.count_var, self.count_lock, self._count_listener,
                 security_wait=self.security_wait,
                 vote_cooldown=self.vote_cooldown if self.vote_cooldown is not None else cooldowns[vid]
             )
@@ -55,7 +55,7 @@ class Application:
 
         logger.info(f'Voting for {browser.email} / {browser.channel_name} ended with {str(exit_reason)}!')
 
-    def get_ready_accs(self) -> Tuple[str, str, str]:
+    def get_ready_accs(self) -> List[Tuple[str, str, str]]:
         processes = []
         channels = []
         for email in self.credentials:

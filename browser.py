@@ -1,6 +1,7 @@
 import dataclasses
 import enum
 import multiprocessing
+import random
 from datetime import datetime
 from time import sleep
 from itertools import count
@@ -40,6 +41,7 @@ class Browser:
     email: str
     password: str
     channel_name: str
+    f_msg: str
 
     exit_var: Value
     alltime_count: Value
@@ -48,7 +50,6 @@ class Browser:
 
     refresh_interval: int = 100
     max_votes: int = 760
-    f_msg: str = 'DE #{}'
     security_wait: float = 2
     vote_cooldown: float = 6
 
@@ -130,7 +131,7 @@ class Browser:
 
         channels = {}
         for i, channel_raw in enumerate(self.browser.find_elements(By.TAG_NAME, 'ytd-account-item-renderer')):
-            title = channel_raw.find_element(By.ID, 'channel-title').text
+            title = channel_raw.find_element(By.ID, 'channel-title').find_element(By.XPATH, "./following-sibling::*[1]").text
             channels[title] = channel_raw
 
         self.log(DEBUG, f'Found channels for {self.email}: {", ".join(channels.keys())}')
@@ -176,7 +177,7 @@ class Browser:
                 if session_count >= self.max_votes:  # stopping when max_votes is reached
                     break
 
-                sleep(self.vote_cooldown)
+                sleep(self.vote_cooldown * (31/30))  # cooldown + 1/30 wait
 
         except WebDriverException as exc:
             session_count -= 1
@@ -190,7 +191,7 @@ class Browser:
         # TODO other exceptions cause ExitReason None!!!!!!
 
         else:
-            logger.info(f'Successfully finished vote loop!')
+            self.log(INFO, f'Successfully finished vote loop!')
             exit_reason = ExitReason.FINISHED
 
         finally:
