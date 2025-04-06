@@ -32,7 +32,7 @@ def main():
     credentials = load_credentials()
 
     app = Application(
-        credentials=credentials, f_msg='DE #{}', max_accounts=max_accounts)
+        credentials=credentials, f_msgs=['DE #{alltime}'], max_accounts=max_accounts)
     app.run()
 
 if __name__ == '__main__':

@@ -1,23 +1,16 @@
 import dataclasses
 import enum
-import multiprocessing
 import random
 from datetime import datetime
 from time import sleep
-from itertools import count
 
 from multiprocessing import Value, Lock
-from typing import Any, Callable
+from typing import Callable, List
 
-import selenium.webdriver
 from selenium import webdriver
-from selenium.common import NoSuchElementException, WebDriverException
+from selenium.common import WebDriverException
 from selenium.webdriver.common.by import By
-from selenium.webdriver.firefox.options import Options
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.remote.webelement import WebElement
-from seleniumbase import SB, BaseCase
+from seleniumbase import BaseCase
 
 from data import encode, get_acc_paths, load_acc_data, write_acc_data
 
@@ -41,7 +34,7 @@ class Browser:
     email: str
     password: str
     channel_name: str
-    f_msg: str
+    f_msgs: List[str]
 
     exit_var: Value
     alltime_count: Value
@@ -145,7 +138,8 @@ class Browser:
     def _vote(self, session_count: int):
         msg_input = 'html body yt-live-chat-app div#contents.style-scope.yt-live-chat-app yt-live-chat-renderer.style-scope.yt-live-chat-app tp-yt-iron-pages#content-pages.style-scope.yt-live-chat-renderer div#chat-messages.style-scope.yt-live-chat-renderer.iron-selected div#contents.style-scope.yt-live-chat-renderer tp-yt-iron-pages#panel-pages.style-scope.yt-live-chat-renderer div#input-panel.style-scope.yt-live-chat-renderer.iron-selected yt-live-chat-message-input-renderer#live-chat-message-input.style-scope.yt-live-chat-renderer div#container.style-scope.yt-live-chat-message-input-renderer div#top.style-scope.yt-live-chat-message-input-renderer div#input-container.style-scope.yt-live-chat-message-input-renderer yt-live-chat-text-input-field-renderer#input.style-scope.yt-live-chat-message-input-renderer div#input.style-scope.yt-live-chat-text-input-field-renderer'
 
-        self.browser.type(msg_input, self.f_msg.format(self.alltime_count.value + .1) + webdriver.Keys.ENTER)  # send message
+        self.browser.type(msg_input, random.choice(self.f_msgs).format(
+            alltime=self.alltime_count.value, session=session_count) + webdriver.Keys.ENTER)  # send message
         self.log(DEBUG, f'Vote #{self.alltime_count.value} (#{self.acc_count} for account) (#{session_count} for session)')
 
         with self.alltime_count_lock:

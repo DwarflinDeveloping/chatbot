@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 @dataclasses.dataclass
 class Application:
     credentials: Dict[str, Dict[str, List[str]] | Dict[str, str]]
-    f_msg: str
+    f_msgs: List[str]
     max_accounts: Dict[str, int]
     security_wait: float = 2
     vote_cooldown: float = None
@@ -44,8 +44,8 @@ class Application:
 
         with SB(test=True, uc=True, headed=True) as sb:
             browser = Browser(
-                sb, email, password, acc_name, self.f_msg, self.exit_var, self.count_var, self.count_lock, self._count_listener,
-                security_wait=self.security_wait,
+                sb, email, password, acc_name, self.f_msgs, self.exit_var, self.count_var, self.count_lock,
+                self._count_listener, security_wait=self.security_wait,
                 vote_cooldown=self.vote_cooldown if self.vote_cooldown is not None else cooldowns[vid]
             )
             browser.login()
