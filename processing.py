@@ -1,12 +1,12 @@
 import dataclasses
-import multiprocessing
+from dataclasses import field
 import random
 from datetime import datetime
 from multiprocessing import Process, Value, Lock
 from time import sleep
-from typing import Dict, Tuple, List, Callable
+from typing import Dict, Tuple, List, Callable, Any
 
-from seleniumbase import SB
+from seleniumbase import SB, BaseCase
 from typing_extensions import TypeAlias
 
 from browser import Browser
@@ -24,9 +24,10 @@ class Application:
     credentials: Dict[str, Dict[str, List[str]] | Dict[str, str]]
     f_msgs: List[str]
     max_accounts: Dict[str, int]
-    security_wait: float = 2
-    vote_cooldown: float = None
-    invisible_mode: bool = False
+    security_wait: float = field(default_factory=lambda: 2)
+    vote_cooldown: float = field(default_factory=lambda: None)
+    invisible_mode: bool = field(default_factory=lambda: False)
+    sb_args: Dict[str, Any] = field(default_factory=lambda: {'test': True, 'uc': True, 'headed': True})
 
     def __post_init__(self):
         self.active_processes: Dict[str, List[Process]] = {vid: [] for vid in self.max_accounts}
@@ -40,28 +41,38 @@ class Application:
         self.data['count'] = self.count_var.value
         write_app_data(self.data)
 
-    def _browser_task(self, email: str, password: str, acc_name: str, vid: str):
+    def _voting_task(self, email: str, password: str, acc_name: str, vid: str):
         logger.info(f'Browser for {email}/{acc_name} starting...')
 
-        with SB(test=True, uc=True, headed=True) as sb:
+        with SB(**self.sb_args) as sb:
             if self.invisible_mode:
                 sb.driver.execute_cdp_cmd("Network.enable", {})
                 sb.driver.execute_cdp_cmd("Network.setBlockedURLs", {
                     "urls": ["*://www.youtube.com/youtubei/v1/live_chat/get_live_chat*"]
                 })
 
-            browser = Browser(
-                sb, email, password, acc_name, self.f_msgs, self.exit_var, self.count_var, self.count_lock,
-                self._count_listener, security_wait=self.security_wait,
-                vote_cooldown=self.vote_cooldown if self.vote_cooldown is not None else cooldowns[vid],
-                invisible_mode=self.invisible_mode
-            )
+            browser = Browser(sb, email, password, self.security_wait, self.invisible_mode)
+            browser.prepare_vote(acc_name, self.f_msgs, self.exit_var, self.count_var, self.count_lock, self._count_listener)
+
             browser.login()
             browser.switch_channel()
             browser.open_livestream(vid)
-            exit_reason = browser.vote_loop()
+            exit_reason = browser.vote_loop(self.vote_cooldown if self.vote_cooldown is not None else cooldowns[vid])
 
-        logger.info(f'Voting for {browser.email} / {browser.channel_name} ended with {str(exit_reason)}!')
+        logger.info(f'Voting for {browser.email}/{browser.channel_alias} ended with {str(exit_reason)}!')
+
+    def _management_task(self, email: str, password: str, channel_name: str, channel_alias: str, creation: bool):
+        logger.info(f'Management for {email}/{channel_alias} starting...')
+        with SB(**self.sb_args) as sb:
+            browser = Browser(sb, email, password, self.security_wait, self.invisible_mode)
+            browser.login()
+            if creation:
+                browser.create_channel(channel_name, channel_alias)
+            else:  # deletion
+                browser.channel_name = channel_name
+                browser.switch_channel()
+                browser.delete_channel()
+
 
     def get_ready_accs(self) -> List[Tuple[str, str, str]]:
         processes = []
@@ -114,7 +125,7 @@ class Application:
                                    f'Trying again in 20s.')
                     sleep(20)
                 else:
-                    process = Process(name='/'.join((args[0], args[2])), target=self._browser_task,
+                    process = Process(name='/'.join((args[0], args[2])), target=self._voting_task,
                                       args=args+(p_vid,), daemon=True)
                     logger.info(f'Creating task {process.name}')
                     process.start()

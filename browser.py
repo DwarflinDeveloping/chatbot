@@ -5,7 +5,7 @@ from datetime import datetime
 from time import sleep
 
 from multiprocessing import Value, Lock
-from typing import Callable, List
+from typing import Callable, List, Tuple
 
 from selenium import webdriver
 from selenium.common import WebDriverException
@@ -34,34 +34,27 @@ class Browser:
     browser: BaseCase
     email: str
     password: str
-    channel_name: str
-    f_msgs: List[str]
 
-    exit_var: Value
-    alltime_count: Value
-    alltime_count_lock: Lock
-    alltime_count_listener: Callable = None
-
-    refresh_interval: int = 100
-    max_votes: int = 760
     security_wait: float = 2
-    vote_cooldown: float = 6
     invisible_mode: bool = False
 
     def __post_init__(self):
-        self.data = self.load_data()
-        self.data['email'] = self.email
-        self.data['channel_name'] = self.channel_name
+        self.session_count, self.f_msgs, self.exit_var = None, None, None
+        self.alltime_count, self.alltime_count_lock, self.alltime_count_listener = None, None, None
+        self.refresh_interval, self.max_votes = None, None
 
-    def log(self, level: int, text: str):
-        logger.log(level, '/'.join((self.email, self.channel_name)) + ' - ' + text)
+        self.channel_alias = None
+        self.data = None
+
+    def log(self, level: int, text: str) -> None:
+        logger.log(level, '/'.join((self.email,)+((self.channel_alias,) if self.channel_alias else ())) + ' - ' + text)
 
     @property
-    def hashes(self):
-        return encode(self.email), encode(self.channel_name)
+    def hashes(self) -> Tuple[str, str]:
+        return encode(self.email), encode(self.channel_alias)
 
     @property
-    def acc_count(self):
+    def acc_count(self) -> int:
         return self.data['count']
 
     @acc_count.setter
@@ -70,25 +63,25 @@ class Browser:
         self.save_data()
 
     @property
-    def active(self):
+    def active(self) -> bool:
         return self.data['active']
 
     @active.setter
-    def active(self, value: bool):
+    def active(self, value: bool) -> None:
         self.data['active'] = value
         self.save_data()
 
     @property
-    def last_vote(self):
+    def last_vote(self) -> str:
         return self.data['last_vote']
 
     @last_vote.setter
-    def last_vote(self, value: bool):
+    def last_vote(self, value: bool) -> None:
         self.data['last_vote'] = value
         self.save_data()
 
     @property
-    def exit(self):
+    def exit(self) -> bool:
         return self.exit_var.value
 
     def save_data(self) -> None:
@@ -97,10 +90,10 @@ class Browser:
     def load_data(self) -> dict:
         return load_acc_data(*self.hashes)
 
-    def _wait(self):
+    def _wait(self) -> None:
         sleep(self.security_wait)
 
-    def login(self):
+    def login(self) -> None:
         self.log(INFO, f'Signing into {self.email}...')
         self.browser.open(SIGN_IN_URL)
 
@@ -119,8 +112,27 @@ class Browser:
         self.browser.click('#passwordNext > div > button')
         self._wait()
 
-    def switch_channel(self):
-        self.log(INFO, f'Switching to channel {self.channel_name}...')
+    def delete_channel(self) -> None:
+        self.browser.open('https://myaccount.google.com/u/1/youtubeoptions')
+        self._wait()
+
+        raise NotImplementedError()
+
+    def create_channel(self, channel_name: str, channel_alias: str) -> None:
+        self.log(INFO, f'Creating channel {channel_name}...')
+        self.browser.open(CHANNEL_SWITCHER_URL)
+        self._wait()
+
+        self.browser.click('#contents > ytd-button-renderer > yt-button-shape > button')  # create channel btn
+        self._wait()
+
+        self.browser.type('#input-2 input', channel_name)  # channel name input
+        self.browser.type('#input-3 input', channel_alias)  # channel alias input
+
+        sleep(10)
+
+    def switch_channel(self) -> None:
+        self.log(INFO, f'Switching channel...')
         self.browser.open(CHANNEL_SWITCHER_URL)
         self._wait()
 
@@ -130,14 +142,14 @@ class Browser:
             channels[title] = channel_raw
 
         self.log(DEBUG, f'Found channels for {self.email}: {", ".join(channels.keys())}')
-        channels[self.channel_name].click()
+        channels[self.channel_alias].click()
 
-    def open_livestream(self, vid: str):
+    def open_livestream(self, vid: str) -> None:
         self.log(INFO, f'Opening livestream {vid}...')
         self.browser.get(F_LIVE_CHAT_URL.format(vid))
         self._wait()
 
-    def _vote(self, session_count: int):
+    def _vote(self, session_count: int) -> None:
         msg_input = 'html body yt-live-chat-app div#contents.style-scope.yt-live-chat-app yt-live-chat-renderer.style-scope.yt-live-chat-app tp-yt-iron-pages#content-pages.style-scope.yt-live-chat-renderer div#chat-messages.style-scope.yt-live-chat-renderer.iron-selected div#contents.style-scope.yt-live-chat-renderer tp-yt-iron-pages#panel-pages.style-scope.yt-live-chat-renderer div#input-panel.style-scope.yt-live-chat-renderer.iron-selected yt-live-chat-message-input-renderer#live-chat-message-input.style-scope.yt-live-chat-renderer div#container.style-scope.yt-live-chat-message-input-renderer div#top.style-scope.yt-live-chat-message-input-renderer div#input-container.style-scope.yt-live-chat-message-input-renderer yt-live-chat-text-input-field-renderer#input.style-scope.yt-live-chat-message-input-renderer div#input.style-scope.yt-live-chat-text-input-field-renderer'
 
         with self.alltime_count_lock:
@@ -162,8 +174,20 @@ class Browser:
             self.browser.refresh()
             self._wait()
 
-    def vote_loop(self) -> ExitReason:
+    def prepare_vote(self, channel_alias: str, f_msgs: List[str], exit_var: Value, alltime_count: Value,
+                     alltime_count_lock: Lock, alltime_count_listener: Callable = None,
+                     refresh_interval: int = 100, max_votes: int = 760) -> None:
+        self.channel_alias, self.f_msgs, self.exit_var = channel_alias, f_msgs, exit_var
+        self.alltime_count, self.alltime_count_lock, self.alltime_count_listener = alltime_count, alltime_count_lock, alltime_count_listener
+        self.refresh_interval, self.max_votes = refresh_interval, max_votes
+
+        self.data = self.load_data()
+        self.data['email'] = self.email
+        self.data['channel_alias'] = self.channel_alias
+
+    def vote_loop(self, vote_cooldown: float | int) -> ExitReason:
         self.log(INFO, f'Starting vote loop...')
+
         self.active = True
         session_count = 0
         exit_reason = None
@@ -180,7 +204,7 @@ class Browser:
                 if session_count >= self.max_votes:  # stopping when max_votes is reached
                     break
 
-                sleep(self.vote_cooldown * (31/30))  # cooldown + 1/30 wait
+                sleep(vote_cooldown * (31/30))  # cooldown + 1/30 wait
 
         except WebDriverException as exc:
             session_count -= 1
@@ -193,8 +217,8 @@ class Browser:
 
         except Exception as exc:
             exit_reason = ExitReason.UNKNOWN
-            self.log(DEBUG, f'{exc.__class__.__name__} while running vote loop: ' +
-                            exc.message if hasattr(exc, 'message') else exc)
+            self.log(FATAL, f'{exc.__class__.__name__} while running vote loop: ' +
+                     (exc.message if hasattr(exc, 'message') else str(exc)))
 
         else:
             self.log(INFO, f'Successfully finished vote loop!')

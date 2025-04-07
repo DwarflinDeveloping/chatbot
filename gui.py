@@ -1,31 +1,39 @@
-import threading
-import time
-from pynput import keyboard, keyboard as kb
-import pyautogui
+import PySimpleGUI as sg
 
-running = False
+# Initial input fields
+input_fields = ['']
 
-def type_hello():
-    global running
-    count = 1
-    while True:
-        if running:
-            pyautogui.typewrite(f'DE \'{count}\n')
-            count += 1
-            time.sleep(6.25)
-        else:
-            time.sleep(0.1)
+def create_layout(inputs):
+    layout = [
+        [sg.Text("Main Textbox")],
+        [sg.Multiline(size=(40, 5), key='-TEXTBOX-')],
+        [sg.Text("Dynamic Inputs")]
+    ]
+    for i, val in enumerate(inputs):
+        layout.append([sg.Input(default_text=val, key=f'-IN-{i}-')])
+    layout.append([sg.Button("Start")])
+    return layout
 
-def toggle_typing(key):
-    global running
-    if key == keyboard.Key.f8:
-        running = not running
-        print("Typing started" if running else "Typing stopped")
+window = sg.Window("Dynamic Input App", create_layout(input_fields))
 
-# Start the typing thread
-typing_thread = threading.Thread(target=type_hello, daemon=True)
-typing_thread.start()
+while True:
+    event, values = window.read()
 
-# Listen for the F8 key
-with keyboard.Listener(on_press=toggle_typing) as listener:
-    listener.join()
+    if event == sg.WIN_CLOSED:
+        break
+
+    # Check if we need to add a new input
+    last_key = f'-IN-{len(input_fields)-1}-'
+    if values.get(last_key):
+        input_fields.append('')
+        window.close()
+        window = sg.Window("Dynamic Input App", create_layout(input_fields))
+        continue
+
+    if event == "Start":
+        main_text = values['-TEXTBOX-']
+        inputs = [values[f'-IN-{i}-'] for i in range(len(input_fields)) if values[f'-IN-{i}-'].strip() != '']
+        print("Main Text:", main_text)
+        print("Inputs:", inputs)
+
+window.close()
