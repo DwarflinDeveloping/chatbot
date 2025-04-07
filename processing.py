@@ -26,6 +26,7 @@ class Application:
     max_accounts: Dict[str, int]
     security_wait: float = 2
     vote_cooldown: float = None
+    invisible_mode: bool = False
 
     def __post_init__(self):
         self.active_processes: Dict[str, List[Process]] = {vid: [] for vid in self.max_accounts}
@@ -43,10 +44,17 @@ class Application:
         logger.info(f'Browser for {email}/{acc_name} starting...')
 
         with SB(test=True, uc=True, headed=True) as sb:
+            if self.invisible_mode:
+                sb.driver.execute_cdp_cmd("Network.enable", {})
+                sb.driver.execute_cdp_cmd("Network.setBlockedURLs", {
+                    "urls": ["*://www.youtube.com/youtubei/v1/live_chat/get_live_chat*"]
+                })
+
             browser = Browser(
                 sb, email, password, acc_name, self.f_msgs, self.exit_var, self.count_var, self.count_lock,
                 self._count_listener, security_wait=self.security_wait,
-                vote_cooldown=self.vote_cooldown if self.vote_cooldown is not None else cooldowns[vid]
+                vote_cooldown=self.vote_cooldown if self.vote_cooldown is not None else cooldowns[vid],
+                invisible_mode=self.invisible_mode
             )
             browser.login()
             browser.switch_channel()

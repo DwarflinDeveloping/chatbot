@@ -27,6 +27,7 @@ class ExitReason(enum.Enum):
     FINISHED = 0    # properly reached max_votes
     WEBDRIVER = 1   # WebdriverException
     FORCED = 2      # user forcefully stopped the program
+    UNKNOWN = 3     # unknown error occurred
 
 @dataclasses.dataclass
 class Browser:
@@ -45,6 +46,7 @@ class Browser:
     max_votes: int = 760
     security_wait: float = 2
     vote_cooldown: float = 6
+    invisible_mode: bool = False
 
     def __post_init__(self):
         self.data = self.load_data()
@@ -124,7 +126,7 @@ class Browser:
 
         channels = {}
         for i, channel_raw in enumerate(self.browser.find_elements(By.TAG_NAME, 'ytd-account-item-renderer')):
-            title = channel_raw.find_element(By.ID, 'channel-title').find_element(By.XPATH, "./following-sibling::*[1]").text
+            title = channel_raw.find_element(By.ID, 'channel-title').find_element(By.XPATH, './following-sibling::*[1]').text
             channels[title] = channel_raw
 
         self.log(DEBUG, f'Found channels for {self.email}: {", ".join(channels.keys())}')
@@ -138,12 +140,19 @@ class Browser:
     def _vote(self, session_count: int):
         msg_input = 'html body yt-live-chat-app div#contents.style-scope.yt-live-chat-app yt-live-chat-renderer.style-scope.yt-live-chat-app tp-yt-iron-pages#content-pages.style-scope.yt-live-chat-renderer div#chat-messages.style-scope.yt-live-chat-renderer.iron-selected div#contents.style-scope.yt-live-chat-renderer tp-yt-iron-pages#panel-pages.style-scope.yt-live-chat-renderer div#input-panel.style-scope.yt-live-chat-renderer.iron-selected yt-live-chat-message-input-renderer#live-chat-message-input.style-scope.yt-live-chat-renderer div#container.style-scope.yt-live-chat-message-input-renderer div#top.style-scope.yt-live-chat-message-input-renderer div#input-container.style-scope.yt-live-chat-message-input-renderer yt-live-chat-text-input-field-renderer#input.style-scope.yt-live-chat-message-input-renderer div#input.style-scope.yt-live-chat-text-input-field-renderer'
 
-        self.browser.type(msg_input, random.choice(self.f_msgs).format(
-            alltime=self.alltime_count.value, session=session_count) + webdriver.Keys.ENTER)  # send message
-        self.log(DEBUG, f'Vote #{self.alltime_count.value} (#{self.acc_count} for account) (#{session_count} for session)')
-
         with self.alltime_count_lock:
             self.alltime_count.value += 1
+            alltime_count_val = self.alltime_count.value
+
+        self.browser.type(msg_input, random.choice(self.f_msgs).format(
+            alltime=alltime_count_val, session=session_count) + webdriver.Keys.ENTER)  # send message
+        self.log(DEBUG, f'Vote #{alltime_count_val} (#{self.acc_count} for account) (#{session_count} for session)')
+
+        if self.invisible_mode:
+            sleep(1)
+            self.browser.execute_script("document.evaluate('(//yt-live-chat-text-message-renderer)[last()]//*[@id=\"menu-button\"]', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue?.click();")
+            # self.browser.click(By.XPATH, '(//yt-live-chat-text-message-renderer)[last()]//*[@id="menu-button"]')
+            self.browser.click(By.TAG_NAME, 'ytd-menu-service-item-renderer')
 
         if self.alltime_count_listener:
             self.alltime_count_listener()
@@ -182,7 +191,10 @@ class Browser:
             self.log(DEBUG, f'KeyboardInterrupt while running vote loop!')
             exit_reason = ExitReason.FORCED
 
-        # TODO other exceptions cause ExitReason None!!!!!!
+        except Exception as exc:
+            exit_reason = ExitReason.UNKNOWN
+            self.log(DEBUG, f'{exc.__class__.__name__} while running vote loop: ' +
+                            exc.message if hasattr(exc, 'message') else exc)
 
         else:
             self.log(INFO, f'Successfully finished vote loop!')
